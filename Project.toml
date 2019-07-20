@@ -1,0 +1,13 @@
+name = "StatsMonitor"
+uuid = "64a9cc7c-ab03-11e9-1db3-cfeae292b146"
+authors = ["Josh Day <emailjoshday@gmail.com>"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
