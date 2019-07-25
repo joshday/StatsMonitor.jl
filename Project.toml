@@ -3,11 +3,16 @@ uuid = "64a9cc7c-ab03-11e9-1db3-cfeae292b146"
 authors = ["Josh Day <emailjoshday@gmail.com>"]
 version = "0.1.0"
 
+[deps]
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+OnlineStats = "a15396b6-48d5-5d58-9928-6d29437db91e"
+OnlineStatsBase = "925886fa-5bf2-5e8e-b522-a9147a512338"
+Parsers = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
+Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
+
 [compat]
 julia = "1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[targets]
-test = ["Test"]
