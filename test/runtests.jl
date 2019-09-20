@@ -2,23 +2,39 @@ using StatsMonitor
 using Test
 using Sockets
 
-@testset "StatsMonitor.jl" begin
+opts = StatsMonitor.Config(interval=1)
 
-bucket = Dict{Symbol,Vector{Float64}}()
-
-opts = StatsMonitor.Config(bucket=bucket)
 @async StatsMonitor.udp_server(opts)
-sock = UDPSocket()
 
-function test()
-    t = Timer(t -> send(sock, ip"127.0.0.1", opts.port, """{ "myId": { "val": $(randn()), "stat": "m" } }"""), 1, interval=1/100)
-    t2 = Timer(t -> send(sock, ip"127.0.0.1", opts.port, """{ "myId2": { "val": $(randn()), "stat": "m" } }"""), .9, interval=1/100)
-    sleep(10)
-    close(t)
-    close(t2)
+s1() = """{ "myId": { "m": $(randn()), "tags": ["t1", "t2"] } }"""
+s2() = """{ "myId2": { "c": 1, "tags": ["t2", "t3"] } }"""
+s3() = """{ "myId3": { "s": $(rand(1:10)), "tags": ["t2", "t3"] } }"""
+
+function test(n = 1000)
+    sock = UDPSocket()
+
+    for _ in 1:n
+        send(sock, ip"127.0.0.1", 8125, s1())
+        send(sock, ip"127.0.0.1", 8125, s2())
+        send(sock, ip"127.0.0.1", 8125, s3())
+    end
+
     close(sock)
 end
-
 test()
-@info bucket
-end
+
+# function test2(n=10_000)
+#     s1() = """{ "myId": { "mean": $(randn()), "tags": ["t1", "t2"] } }"""
+#     s2() = """{ "myId2": { "omean": $(randn()), "tags": ["t2", "t3"] } }"""
+
+#     sock = UDPSocket()
+#     f1() = for i in 1:n; send(sock, ip"127.0.0.1", opts.port, s1()); end
+#     f2() = for i in 1:n; send(sock, ip"127.0.0.1", opts.port, s2()); end
+
+#     @time f1()
+#     @time f1()
+#     @time f2()
+#     @time f2()
+#     close(sock)
+# end
+# test2()
