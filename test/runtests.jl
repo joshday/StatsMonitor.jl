@@ -4,7 +4,7 @@ using Sockets
 
 opts = StatsMonitor.Config(interval=1)
 
-@async StatsMonitor.udp_server(opts)
+@async StatsMonitor.tcp_server(opts)
 
 s1() = """{ "myId": { "m": $(randn()), "tags": ["t1", "t2"] } }"""
 s2() = """{ "myId2": { "c": 1, "tags": ["t2", "t3"] } }"""
