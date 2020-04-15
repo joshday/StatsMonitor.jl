@@ -78,7 +78,7 @@ function eval_msg(ex)
         ex.args[1].value isa Symbol && 
         ex.args[2] isa Int && 
         ex.args[3] isa Union{Int, Float64, String}
-    ok || error("Data has issues: $ex")
+    ok || error("Message has issues: $ex")
     eval(ex)
 end
 
