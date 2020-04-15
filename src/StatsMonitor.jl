@@ -4,69 +4,141 @@ using Sockets
 using Statistics
 using Dates
 using JSON3
+using OrderedCollections
 
-#-----------------------------------------------------------------------# utils
-init_buckets() = Dict{Symbol, Any}()
-
-q5(x) = quantile(x, [0, .25, .5, .75, 1])
-
-function get_stat(s::Symbol)
-    s == :mean      && return mean
-    s == :max       && return maximum
-    s == :min       && return minimum
-    s == :extrema   && return extrema
-    s == :median    && return median
-    s == :sum       && return sum
-    s == :q5        && return q5
-    return error("Unrecognized statistic")
-end
-
-#-----------------------------------------------------------------------# Backend
+#-----------------------------------------------------------------------------# Backend
 abstract type Backend end
 
 struct TerminalBackend <: Backend end
 
-#-----------------------------------------------------------------------# Config
-struct Config{B <: Backend}
+#-----------------------------------------------------------------------------# functions 
+const functions = OrderedDict(
+    1 => sum,
+    2 => mean
+)
+
+
+#-----------------------------------------------------------------------------# Bucket
+struct Bucket{T}
+    f::Int
+    data::Vector{T}
+end
+function Base.get!(o::Bucket) 
+    result = functions[o.f](o.data)
+    empty!(o.data)
+    return result
+end
+
+#-----------------------------------------------------------------------------# StatServer
+struct StatServer{B<:Backend}
+    buckets_int::Dict{Symbol, Bucket{Int}}
+    buckets_float::Dict{Symbol, Bucket{Float64}}
+    buckets_string::Dict{Symbol, Bucket{String}}
     port::Int
     backend::B
     interval::Int
 end
-function Config(;port=8125, backend=TerminalBackend(), interval=1)
-    Config(port, backend, interval)
+function StatServer(; port=8125, backend=TerminalBackend(), interval=5)
+    _b(T::Type) = Dict{Symbol, Bucket{T}}()
+    StatServer(_b(Int), _b(Float64), _b(String), port, backend, interval)
 end
+empty!(o::StatServer) = (empty!(o.buckets_int); empty!(o.buckets_float); empty!(o.buckets_string))
 
-function flush!(buckets, c::Config{TerminalBackend})
-    println("Heartbeat: $(now())")
-    println(Dict(k => (n = length(v[1]), stat=v[2], result=v[2](v[1])) for (k,v) in pairs(buckets)))
-    empty!(buckets)
-end
-
-
-#-----------------------------------------------------------------------# tcp_server
-# expects message like: """{ "my_id": { "mean": $(randn()) } }"""
-function tcp_server(c::Config = Config())
-    server = listen(c.port)
-    buckets = init_buckets()
-    timer = Timer(_ -> flush!(buckets, c), 1, interval=c.interval)
-    while true
+function start(o::StatServer)
+    @info "Listening on port $(o.port)..."
+    server = listen(o.port)
+    @info "Creating Timer..."
+    timer = Timer(1, interval=o.interval) do x
+        @info "flushing..."
+        try
+            flush(o)
+        catch ex
+            @info "flushing didn't work" ex
+        finally
+            empty!(o)
+        end
+    end
+    while true 
+        @info "message received..."
         sock = accept(server)
         @async while isopen(sock)
-            js = JSON3.read(readline(sock))
-            for (k, v) in pairs(js)
-                if haskey(buckets, k)
-                    push!(buckets[k].data, first(values(v)))
-                else
-                    for (k2, v2) in pairs(v)
-                        setindex!(buckets, (data=[v2], stat=get_stat(k2)), k)
-                    end
-                end
+            s = readline(sock)
+            @info "Message: $s"
+            try 
+                msg = Meta.parse(s)
+                @info "msg: $msg"
+                data = eval_msg(msg)
+                @info "data: $data"
+                push!(o, data)
+            catch ex 
+                @warn ex
             end
         end
     end
     close(timer)
     close(server)
 end
+
+function eval_msg(ex)
+    ok = ex.head === :tuple && 
+        ex.args[1] isa QuoteNode &&
+        ex.args[1].value isa Symbol && 
+        ex.args[2] isa Int && 
+        ex.args[3] isa Union{Int, Float64, String}
+    ok || error("Data has issues: $ex")
+    eval(ex)
+end
+
+function Base.push!(o::StatServer, data::Tuple)
+    id, function_id, value = data 
+    b = getbucket(o, value)
+    haskey(b, id) ? push!(b[id].data, value) : (b[id] = Bucket(function_id, [value]))
+end
+
+getbucket(o::StatServer, ::Int) = o.buckets_int
+getbucket(o::StatServer, ::Float64) = o.buckets_float
+getbucket(o::StatServer, ::String) = o.buckets_string
+
+#-----------------------------------------------------------------------------# flush 
+function flush(o::StatServer{TerminalBackend})
+    out = OrderedDict{Symbol, Any}()
+    for (k,v) in o.buckets_int 
+        out[k] = functions[v.f](v.data)
+    end
+    for (k, v) in o.buckets_float 
+        out[k] = functions[v.f](v.data)
+    end 
+    for (k, v) in o.buckets_string 
+        out[k] = functions[v.f](v.data)
+    end
+    println(out)
+end
+
+
+# #-----------------------------------------------------------------------# tcp_server
+# # expects message like: """{ "my_id": { "mean": $(randn()) } }"""
+# function tcp_server(c::Config = Config())
+#     server = listen(c.port)
+#     buckets = init_buckets()
+#     timer = Timer(_ -> flush!(buckets, c), 1, interval=c.interval)
+#     while true
+#         sock = accept(server)
+#         @async while isopen(sock)
+#             js = JSON3.read(readline(sock))
+#             for (k, v) in pairs(js)
+#                 if haskey(buckets, k)
+#                     push!(buckets[k].data, first(values(v)))
+#                 else
+#                     for (k2, v2) in pairs(v)
+#                         setindex!(buckets, (data=[v2], stat=get_stat(k2)), k)
+#                     end
+#                 end
+#             end
+#         end
+#     end
+#     close(timer)
+#     close(server)
+# end
 
 
 # using Sockets
