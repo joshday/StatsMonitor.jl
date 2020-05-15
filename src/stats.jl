@@ -20,7 +20,7 @@ struct Stats{A,B,C,D,I}
     end
 end
 
-init_stat(::Type{<:Number}) = GroupBy(DateTime, Series(Variance(), Extrema(), ExpandingHist(100)))
+init_stat(::Type{<:Number}) = GroupBy(DateTime, Series(Mean(), Extrema(), ExpandingHist(100)))
 init_stat(::Type{String}) = GroupBy(DateTime, CountMap(String))
 init_stat(::Type{Bool}) = GroupBy(DateTime, CountMap(Bool))
 init_stat(::Type{Nothing}) = GroupBy(DateTime, Counter(Nothing))
@@ -39,32 +39,66 @@ end
 
 #-----------------------------------------------------------------------------# printing
 Base.show(io::IO, o::Stats) = print_tree(io, o)
-AbstractTrees.printnode(io::IO, o::Stats) = print(io, "Stats")
+AbstractTrees.printnode(io::IO, o::Stats) = print(io, "Stats | Every: $(o.interval)")
 function AbstractTrees.children(o::Stats) 
     d = reduce((a,b) -> merge(vcat, a, b), [o.number_stats, o.string_stats, o.bool_stats, o.null_stats])
     collect(d)
 end
 
-
-@recipe function f(o::Stats) 
-    dicts = [o.number_stats, o.string_stats, o.bool_stats, o.null_stats]
-    nplots = sum(length(keys(d)) for d in dicts)
+#-----------------------------------------------------------------------------# Plot
+function _xlim(o::Stats)
     a, b = typemax(DateTime), typemin(DateTime)
-    layout --> nplots
-    i = 0
-    for dict in dicts
-        i += 1
-        for (k, v) in dict
-            @series begin 
-                label --> string(k)
-                subplot --> i
-                a = min(a, minimum(keys(v.value)))
-                b = max(b, maximum(keys(v.value)))
-                [(t, t + o.interval) => stat for (t,stat) in v.value]
-            end
+    for dict in [o.number_stats, o.string_stats, o.bool_stats, o.null_stats]
+        for (id, gb) in dict 
+            a = min(a, minimum(keys(gb.value)))
+            b = max(b, maximum(keys(gb.value)))
         end
     end
-    @info a, b
-    xlim --> (a, b)
-    nothing
+    Dates.value(a), Dates.value(b)
 end
+
+@recipe function f(o::Stats, type=3)
+    i = 0
+    layout --> sum(length, (o.number_stats, o.string_stats, o.bool_stats, o.null_stats))
+    xlims --> _xlim(o)
+    xrotation --> 45
+    for (id, gb) in o.number_stats 
+        i += 1
+        @series begin 
+            subplot --> i
+            title --> string(id)
+            [(t, t + o.interval) => Series(series.stats[type]) for (t, series) in value(gb)]
+        end
+    end
+    for (id, gb) in Iterators.flatten((o.string_stats , o.bool_stats, o.null_stats))
+        i += 1
+        @series begin 
+            subplot --> i
+            title --> string(id)
+            [(t, t + o.interval) => stat for (t, stat) in value(gb)]
+        end
+    end
+end
+
+# @recipe function f(o::Stats) 
+#     dicts = [o.number_stats, o.string_stats, o.bool_stats, o.null_stats]
+#     nplots = sum(length(keys(d)) for d in dicts)
+#     a, b = typemax(DateTime), typemin(DateTime)
+#     layout --> nplots
+#     i = 0
+#     for dict in dicts
+#         i += 1
+#         for (k, v) in dict
+#             @series begin 
+#                 label --> string(k)
+#                 subplot --> i
+#                 a = min(a, minimum(keys(v.value)))
+#                 b = max(b, maximum(keys(v.value)))
+#                 [(t, t + o.interval) => stat for (t,stat) in v.value]
+#             end
+#         end
+#     end
+#     @info a, b
+#     xlim --> (a, b)
+#     nothing
+# end
