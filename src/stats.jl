@@ -61,7 +61,7 @@ end
     i = 0
     layout --> sum(length, (o.number_stats, o.string_stats, o.bool_stats, o.null_stats))
     xlims --> _xlim(o)
-    xrotation --> 45
+    xrotation --> 15
     for (id, gb) in o.number_stats 
         i += 1
         @series begin 
